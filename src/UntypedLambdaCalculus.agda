@@ -344,14 +344,14 @@ data _→ᵦ_ : Rel Lambda 0ℓ where
   β-compat₂ : ∀ {M N L} → M →ᵦ N → L [ M ] →ᵦ L [ N ]
   β-compat₃ : ∀ {M N z} → M →ᵦ N → (λ' z ⇒ M) →ᵦ (λ' z ⇒ N)
 
-infix 0 _→ᵦ[_]_
-
 -- Multi-step β-reduction
 
-data _→ᵦ[_]_ : Lambda → ℕ → Lambda → Set where
-  β-refl : ∀ {x} → x →ᵦ[ 0 ] x
-  β-one-step : ∀ {M N} → M →ᵦ N → M →ᵦ[ 1 ] N
-  β-multi-step : ∀ {M N P m n} → M →ᵦ[ m ] N → N →ᵦ[ n ] P → M →ᵦ[ m + n ] P
+infix 0 _↠ᵦ_
+
+data _↠ᵦ_ : {ℕ} → Lambda → Lambda → Set where
+  β-refl : ∀ {x} → _↠ᵦ_ {0} x x
+  β-one-step : ∀ {M N} → M →ᵦ N → _↠ᵦ_ {1} M N
+  β-multi-step : ∀ {M N P m n} → _↠ᵦ_ {m} M N → _↠ᵦ_ {n} N P → _↠ᵦ_ {m + n} M P
 
 term₁ : Lambda
 term₁ = λ' "x" ⇒ "x"
@@ -371,11 +371,11 @@ _ = β-base
 _ : term₃ →ᵦ "y" [ "z" ]
 _ = β-compat₁ β-base
 
-_ : term₁ →ᵦ[ 0 ] λ' "x" ⇒ "x"
+_ : term₁ ↠ᵦ λ' "x" ⇒ "x"
 _ = β-refl
 
-p₁ : (λ' "x" ⇒ "x") [ (λ' "z" ⇒ "x") [ "y" ] ] →ᵦ[ 1 ] (λ' "x" ⇒ "x") [ "x" ]
+p₁ : (λ' "x" ⇒ "x") [ (λ' "z" ⇒ "x") [ "y" ] ] ↠ᵦ (λ' "x" ⇒ "x") [ "x" ]
 p₁ = β-one-step (β-compat₂ β-base)
 
-_ : term₄ →ᵦ[ 2 ] "x"
+_ : term₄ ↠ᵦ "x"
 _ = β-multi-step p₁ (β-one-step β-base)
