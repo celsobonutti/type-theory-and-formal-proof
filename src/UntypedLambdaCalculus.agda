@@ -336,22 +336,22 @@ ex-16 = v , not-eq
     not-eq : ¬ ((v ⟨ "y" := "x"⟩) ⟨ "x" := "y" ⟩ ≡ (v ⟨[ substs ]⟩))
     not-eq with no p ← (v ⟨ "y" := "x"⟩) ⟨ "x" := "y" ⟩ ≟λ v ⟨[ substs ]⟩ = p
 
-infixl 0 _→β_
+infixl 0 _→ᵦ_
 
-data _→β_ : Rel Lambda 0ℓ where
-  β-base : ∀ {x M N} → (λ' x ⇒ M) [ N ] →β M ⟨ x := N ⟩
-  β-compat₁ : ∀ {M N L} → M →β N → M [ L ] →β N [ L ]
-  β-compat₂ : ∀ {M N L} → M →β N → L [ M ] →β L [ N ]
-  β-compat₃ : ∀ {M N z} → M →β N → (λ' z ⇒ M) →β (λ' z ⇒ N)
+data _→ᵦ_ : Rel Lambda 0ℓ where
+  β-base : ∀ {x M N} → (λ' x ⇒ M) [ N ] →ᵦ M ⟨ x := N ⟩
+  β-compat₁ : ∀ {M N L} → M →ᵦ N → M [ L ] →ᵦ N [ L ]
+  β-compat₂ : ∀ {M N L} → M →ᵦ N → L [ M ] →ᵦ L [ N ]
+  β-compat₃ : ∀ {M N z} → M →ᵦ N → (λ' z ⇒ M) →ᵦ (λ' z ⇒ N)
 
-infix 0 _→β[_]_
+infix 0 _→ᵦ[_]_
 
 -- Multi-step β-reduction
 
-data _→β[_]_ : Lambda → ℕ → Lambda → Set where
-  β-refl : ∀ {x} → x →β[ 0 ] x
-  β-one-step : ∀ {M N} → M →β N → M →β[ 1 ] N
-  β-multi-step : ∀ {M N P m n} → M →β[ m ] N → N →β[ n ] P → M →β[ m + n ] P
+data _→ᵦ[_]_ : Lambda → ℕ → Lambda → Set where
+  β-refl : ∀ {x} → x →ᵦ[ 0 ] x
+  β-one-step : ∀ {M N} → M →ᵦ N → M →ᵦ[ 1 ] N
+  β-multi-step : ∀ {M N P m n} → M →ᵦ[ m ] N → N →ᵦ[ n ] P → M →ᵦ[ m + n ] P
 
 term₁ : Lambda
 term₁ = λ' "x" ⇒ "x"
@@ -365,17 +365,17 @@ term₃ = term₂ [ "z" ]
 term₄ : Lambda
 term₄ = (λ' "x" ⇒ "x") [ (λ' "z" ⇒ "x") [ "y" ] ]
 
-_ : term₂ →β "y"
+_ : term₂ →ᵦ "y"
 _ = β-base
 
-_ : term₃ →β "y" [ "z" ]
+_ : term₃ →ᵦ "y" [ "z" ]
 _ = β-compat₁ β-base
 
-_ : term₁ →β[ 0 ] λ' "x" ⇒ "x"
+_ : term₁ →ᵦ[ 0 ] λ' "x" ⇒ "x"
 _ = β-refl
 
-p₁ : (λ' "x" ⇒ "x") [ (λ' "z" ⇒ "x") [ "y" ] ] →β[ 1 ] (λ' "x" ⇒ "x") [ "x" ]
+p₁ : (λ' "x" ⇒ "x") [ (λ' "z" ⇒ "x") [ "y" ] ] →ᵦ[ 1 ] (λ' "x" ⇒ "x") [ "x" ]
 p₁ = β-one-step (β-compat₂ β-base)
 
-_ : term₄ →β[ 2 ] "x"
+_ : term₄ →ᵦ[ 2 ] "x"
 _ = β-multi-step p₁ (β-one-step β-base)
