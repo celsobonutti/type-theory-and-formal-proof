@@ -3,12 +3,14 @@ module StrSet where
 open import Data.String.Properties using (<-strictTotalOrder-≈; ≈-setoid; ≈-decSetoid; _≟_) renaming (≈-sym to ≈ₛ-sym; ≈-refl to ≈ₛ-refl; ≈-trans to ≈ₛ-trans)
 open import Data.Tree.AVL.Sets <-strictTotalOrder-≈ as StrSet renaming (⟨Set⟩ to StrSet; _∈?_ to do-not-use) public
 open import Data.Tree.AVL <-strictTotalOrder-≈ as AVL using () renaming (Tree to AVLTree)
-open import Data.Product using (_×_; _,_)
+open import Data.Product using (_×_; _,_; proj₁; proj₂)
+open import Function.Base using (_∘_)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; trans; sym)
 open import Relation.Binary.PropositionalEquality.Properties
+open import Relation.Nullary.Negation
 open import Data.String using (String; _++_) renaming (_≈_ to _≈ₛ_; _≈?_ to _≈ₛ?_)
 open import Relation.Binary.Structures using (IsEquivalence)
-open import Relation.Nullary.Decidable using (Dec; yes; no)
+open import Relation.Nullary.Decidable using (Dec; yes; no; ¬?)
 open import Relation.Binary using (DecidableEquality) renaming (Decidable to Decidable₂)
 open import Data.List as List using (List; _∷_; [])
 open import Data.List.Relation.Binary.Equality.DecPropositional _≟_ using (≋⇒≡; ≡⇒≋; _≡?_) renaming (_≋_ to _≋ₗ_; _≋?_ to _≋ₗ?_; ≋-refl to ≋ₗ-refl; ≋-sym to ≋ₗ-sym; ≋-trans to ≋ₗ-trans)
@@ -68,6 +70,21 @@ module ≋-Reasoning where
   infixr 2 _≡⟨_⟩_
 
 open AVLTree
+
+
+infix 4 _∈_ _∉_
+
+_∈_ : String → StrSet → Set _
+x ∈ s = Any ((x ≈ₛ_) ∘ proj₁) s
+
+_∉_ : String → StrSet → Set _
+x ∉ s = ¬ x ∈ s
+
+_∈?_ : Decidable₂ _∈_
+x ∈? s = any? ((x ≈ₛ?_) ∘ proj₁) s
+
+_∉?_ : Decidable₂ _∉_
+x ∉? s = ¬? (x ∈? s)
 
 postulate
   -- TODO: Prove this (if possible)

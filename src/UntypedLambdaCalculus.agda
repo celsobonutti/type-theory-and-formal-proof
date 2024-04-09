@@ -1,19 +1,21 @@
 module UntypedLambdaCalculus where
 
-open import Data.List using (List; _∷_; [])
+open import Data.Char using (Char)
+open import Data.List as List using (List; _∷_; [])
 open import Data.Maybe using (Maybe; just; nothing)
-open import Data.Nat using (ℕ; suc; zero)
+open import Data.Nat using (ℕ; suc; zero; _+_)
 open import Data.Nat.Show using (show)
-open import Data.Product using (_×_; _,_; proj₁; proj₂; ∃)
-open import Data.String using (String; _++_) renaming (_≈_ to _≈ₛ_; _≈?_ to _≈ₛ?_)
+open import Data.Product using (_,_; ∃)
+open import Data.String as String using (String; _++_) renaming (_≈_ to _≈ₛ_; _≈?_ to _≈ₛ?_)
 open import Data.String.Properties renaming (≈-sym to ≈ₛ-sym; ≈-refl to ≈ₛ-refl; ≈-trans to ≈ₛ-trans)
-open import Function.Base using (_∘_)
+open import Data.Unit using (⊤; tt)
+open import Function.Base using (_∘_; id)
 open import Level using (Level; 0ℓ)
 open import Relation.Binary using (DecidableEquality) renaming (Decidable to Decidable₂)
 open import Relation.Binary.Core using (Rel; REL)
 open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 open import Relation.Binary.Structures using (IsEquivalence)
-open import Relation.Nullary.Decidable using (True; False; _×-dec_; Dec; yes; no; toWitness; fromWitness; fromWitnessFalse; toWitnessFalse; ¬?)
+open import Relation.Nullary.Decidable using (True; False; _×-dec_; Dec; yes; no; toWitness; fromWitness; fromWitnessFalse; toWitnessFalse)
 open import Relation.Unary using (Pred)
 open import Relation.Nullary.Negation
 open import StrSet
@@ -27,20 +29,35 @@ data Lambda : Set where
   λ'_⇒_ : String → Lambda → Lambda
   _[_] : Lambda → Lambda → Lambda
 
+record IsString (A : Set) : Set where
+  field
+    from-string : String → A
+
+instance
+  stringIsString : IsString String
+  IsString.from-string stringIsString = id
+
+  lambdaIsString : IsString Lambda
+  IsString.from-string lambdaIsString = var
+
+open IsString ⦃...⦄ public using (from-string)
+
+{-# BUILTIN FROMSTRING from-string #-}
+
 Map : Set
 Map = StrMap Lambda
 
-_ : var "x" [ var "y" ] [ var "z"  ] ≡ (var "x" [ var "y" ]) [ var "z" ]
+_ : "x" [ "y" ] [ "z"  ] ≡ ("x" [ "y" ]) [ "z" ]
 _ = refl
 
-_ : λ' "x" ⇒ var "x" [ var "y" ] ≡ λ' "x" ⇒ (var "x" [ var "y" ])
+_ : λ' "x" ⇒ "x" [ "y" ] ≡ λ' "x" ⇒ ("x" [ "y" ])
 _ = refl
 
 _ : Lambda
-_ = λ' "x" ⇒ var "x"
+_ = λ' "x" ⇒ "x"
 
 _ : Lambda
-_ = (λ' "x" ⇒ var "x") [ var "y" ]
+_ = (λ' "x" ⇒ "x") [ "y" ]
 
 infix 0 _≈_
 data _≈_ : Rel Lambda 0ℓ where
@@ -62,6 +79,8 @@ data _≈_ : Rel Lambda 0ℓ where
 ≈-trans (var-eq {x} {y} var₁) (var-eq {y} {z} var₂) = var-eq (≈ₛ-trans {x} {y} {z} var₁ var₂)
 ≈-trans (abs-eq {x} {y} {l₁} {l₂} p₁ b₁) (abs-eq {y} {z} {l₃} {l₄} p₂ b₂) = abs-eq (≈ₛ-trans {x} {y} {z} p₁ p₂) (≈-trans b₁ b₂)
 ≈-trans (app-eq x x₁) (app-eq x₂ x₃) = app-eq (≈-trans x x₂) (≈-trans x₁ x₃)
+
+infix 0 _≟λ_
 
 _≟λ_ : DecidableEquality Lambda
 var x ≟λ var y with x ≟ y
@@ -105,26 +124,12 @@ is-binding? x (λ' x₁ ⇒ y) with x ≟ x₁
 ... | yes refl = yes is-binding
 ... | no  ¬eq  = no λ { is-binding → ¬eq refl}
 
-infix 4 _∈_ _∉_
-
-_∈_ : String → StrSet → Set _
-x ∈ s = Any ((x ≈ₛ_) ∘ proj₁) s
-
-_∉_ : String → StrSet → Set _
-x ∉ s = ¬ x ∈ s
-
-_∈?_ : Decidable₂ _∈_
-x ∈? s = any? ((x ≈ₛ?_) ∘ proj₁) s
-
-_∉?_ : Decidable₂ _∉_
-x ∉? s = ¬? (x ∈? s)
-
 rename : (x : String)
-         → (y : String)
-         → (original : Lambda)
-         → {True (y ∉? FV original)}
-         → {False (is-binding? y original)}
-         → Lambda
+       → (y : String)
+       → (original : Lambda)
+       → {True (y ∉? FV original)}
+       → {False (is-binding? y original)}
+       → Lambda
 rename x y (var z) with x ≟ z
 ... | yes _ = var y
 ... | no  _ = var z
@@ -152,10 +157,10 @@ infix 0 _=α_
 
 data _=α_ : Rel Lambda 0ℓ where
   α-renaming : ∀ {x y body₁ body₂}
-              → {y∉FV : True (y ∉? FV body₁)}
-              → {¬binding : False (is-binding? y body₁)}
-              → {body₂-is-rename : True (body₂ ≟λ rename x y body₁ {y∉FV} {¬binding})}
-              → λ' x ⇒ body₁ =α λ' y ⇒ body₂
+             → {y∉FV : True (y ∉? FV body₁)}
+             → {¬binding : False (is-binding? y body₁)}
+             → {body₂-is-rename : True (body₂ ≟λ rename x y body₁ {y∉FV} {¬binding})}
+             → λ' x ⇒ body₁ =α λ' y ⇒ body₂
   α-compat₁ : ∀ {M N L} → M =α N → M [ L ] =α N [ L ]
   α-compat₂ : ∀ {M N L} → M =α N → L [ M ] =α L [ N ]
   α-compat₃ : ∀ {M N z} → M =α N → λ' z ⇒ M =α λ' z ⇒ N
@@ -163,8 +168,26 @@ data _=α_ : Rel Lambda 0ℓ where
   α-sym     : ∀ {x y} → x =α y → y =α x
   α-trans   : ∀ {x y z} → x =α y → y =α z → x =α z
 
-exercise-3 : λ' "x" ⇒ (var "x" [ λ' "z" ⇒ var "y" ]) =α λ' "z" ⇒ (var "z" [ λ' "z" ⇒ var "y" ])
+exercise-3 : λ' "x" ⇒ ("x" [ λ' "z" ⇒ "y" ]) =α λ' "z" ⇒ ("z" [ λ' "z" ⇒ "y" ])
 exercise-3 = α-renaming
+
+show-subscript : ℕ → String
+show-subscript = to-subscript ∘ show
+  where
+   to-subscript-letter : Char → Char
+   to-subscript-letter '0' = '₀'
+   to-subscript-letter '1' = '₁'
+   to-subscript-letter '2' = '₂'
+   to-subscript-letter '3' = '₃'
+   to-subscript-letter '4' = '₄'
+   to-subscript-letter '5' = '₅'
+   to-subscript-letter '6' = '₆'
+   to-subscript-letter '7' = '₇'
+   to-subscript-letter '8' = '₈'
+   to-subscript-letter '9' = '₉'
+   to-subscript-letter x   = x
+   to-subscript : String → String
+   to-subscript = String.fromList ∘ List.map to-subscript-letter ∘ String.toList
 
 record NameWithProofs (body : Lambda) (new-value : Lambda) : Set where
   field
@@ -173,25 +196,24 @@ record NameWithProofs (body : Lambda) (new-value : Lambda) : Set where
     ¬binding : ¬ (IsBinding name body)
     ∉FVn : name ∉ FV new-value
 
-
 {-# TERMINATING #-}
 new-binding-var : (seed : String)
-               → (count : ℕ)
-               → (binding-var : String)
-               → (subst-var : String)
-               → (body : Lambda)
-               → (new-value : Lambda)
-               → NameWithProofs body new-value
-new-binding-var seed count binding-var subst-var body new-value
-  with (seed ++ show count) ≟ binding-var | (seed ++ show count) ≟ subst-var | (seed ++ show count) ∉? FV body | is-binding? (seed ++ show count) body | (seed ++ show count) ∉? FV new-value
+                → (count : ℕ)
+                → (binding-var : String)
+                → (subst-var : String)
+                → (body : Lambda)
+                → (new-value : Lambda)
+                → NameWithProofs body new-value
+new-binding-var seed count binding-var subst-var body new-value with new-name ← seed ++ show-subscript count
+  with new-name ≟ binding-var | new-name ≟ subst-var | new-name ∉? FV body | is-binding? new-name body | new-name ∉? FV new-value
 ... | no _ | no _ | yes y∉FVb | no ¬binding | yes y∉FVn =
-    record { name = seed ++ show count
+    record { name = new-name
            ; ∉FVb = y∉FVb
            ; ¬binding = ¬binding
            ; ∉FVn = y∉FVn
            }
 ... | _    | _    | _         | _           | _        =
-           new-binding-var seed (suc count) binding-var subst-var body new-value
+    new-binding-var seed (suc count) binding-var subst-var body new-value
 
 {-# TERMINATING #-}
 _⟨_:=_⟩ : Lambda → String → Lambda → Lambda
@@ -210,7 +232,7 @@ var v ⟨ x := N ⟩ with v ≟ x
     record {name = var-name ; ∉FVb = name∉FVM ; ¬binding = ¬binding ; ∉FVn = _} = new-binding-var "z" 0 y x M N
   in λ' var-name ⇒ (rename y var-name M {fromWitness name∉FVM} {fromWitnessFalse ¬binding}) ⟨ x := N ⟩
 
-_ : (λ' "y" ⇒ var "y" [ var "x" ]) ⟨ "x" := var "x" [ var "y" ] ⟩ ≡ λ' "z0" ⇒ var "z0" [ var "x" [ var "y" ] ]
+_ : (λ' "y" ⇒ "y" [ "x" ]) ⟨ "x" := "x" [ "y" ] ⟩ ≡ λ' "z₀" ⇒ "z₀" [ "x" [ "y" ] ]
 _ = refl
 
 all-free-variables : Map → StrSet
@@ -225,15 +247,15 @@ record NameWithProofsMulti (body : Lambda) (new-values : Map) : Set where
 
 {-# TERMINATING #-}
 new-binding-var-multi : (seed : String)
-               → (count : ℕ)
-               → (binding-var : String)
-               → (body : Lambda)
-               → (new-values : Map)
-               → NameWithProofsMulti body new-values
-new-binding-var-multi seed count binding-var body new-values
-  with (seed ++ show count) ≟ binding-var | (seed ++ show count) ∉? FV body | is-binding? (seed ++ show count) body | (seed ++ show count) ∉? all-free-variables new-values
+                      → (count : ℕ)
+                      → (binding-var : String)
+                      → (body : Lambda)
+                      → (new-values : Map)
+                      → NameWithProofsMulti body new-values
+new-binding-var-multi seed count binding-var body new-values with new-name ← seed ++ show-subscript count
+  with new-name ≟ binding-var | new-name ∉? FV body | is-binding? new-name body | new-name ∉? all-free-variables new-values
 ... | no _ | yes y∉FVb | no ¬binding | yes y∉FVn =
-    record { name = seed ++ show count
+    record { name = new-name
            ; ∉FVb = y∉FVb
            ; ¬binding = ¬binding
            ; ∉FVn = y∉FVn
@@ -255,10 +277,10 @@ var x ⟨[ m ]⟩ with Map.lookup m x
       = new-binding-var-multi "z" 0 y M (Map.delete y m)
   in λ' var-name ⇒ (rename y var-name M {fromWitness name∉FVM} {fromWitnessFalse ¬binding} ⟨[ (Map.delete y m) ]⟩)
 
-substs : List (String × Lambda)
-substs = (("y" , var "x") ∷ ("x" , var "y") ∷ [])
+substs : Map
+substs = Map.fromList (("y" , "x") ∷ ("x" , "y") ∷ [])
 
-_ : (var "x" [ var "y" ]) ⟨[ Map.fromList substs ]⟩ ≡ var "y" [ var "x" ]
+_ : ("x" [ "y" ]) ⟨[ substs ]⟩ ≡ "y" [ "x" ]
 _ = refl
 
 infix 0 _≈α_
@@ -270,20 +292,20 @@ data _≈α_ : Rel Lambda 0ℓ where
   subst : ∀ {x M₁ M₂ N₁ N₂} → M₁ ≈α M₂ → N₁ ≈α N₂ → M₁ ⟨ x := N₁ ⟩ ≈α M₂ ⟨ x := N₂ ⟩
 
 U : Lambda
-U = (λ' "z" ⇒ var "z" [ var "x" ] [ var "z" ])
-        [ (λ' "y" ⇒ var "x" [ var "y" ]) [ var "x" ] ]
+U = (λ' "z" ⇒ "z" [ "x" ] [ "z" ])
+        [ (λ' "y" ⇒ "x" [ "y" ]) [ "x" ] ]
 
 V : Lambda
-V = (λ' "y" ⇒ var "y" [ var "x" ] [ var "y" ])
-        [ (λ' "z" ⇒ var "x" [ var "z" ]) [ var "x" ] ]
+V = (λ' "y" ⇒ "y" [ "x" ] [ "y" ])
+        [ (λ' "z" ⇒ "x" [ "z" ]) [ "x" ] ]
 
 W : Lambda
-W = (λ' "x" ⇒ var "x" [ var "y" ] [ var "x" ])
-        [ (λ' "z" ⇒ var "y" [ var "z" ]) [ var "y" ] ]
+W = (λ' "x" ⇒ "x" [ "y" ] [ "x" ])
+        [ (λ' "z" ⇒ "y" [ "z" ]) [ "y" ] ]
 
 X : Lambda
-X = (λ' "y" ⇒ var "y" [ var "x" ] [ var "y" ])
-        [ (λ' "z" ⇒ var "x" [ var "z" ]) [ var "x" ] ]
+X = (λ' "y" ⇒ "y" [ "x" ] [ "y" ])
+        [ (λ' "z" ⇒ "x" [ "z" ]) [ "x" ] ]
 
 _ : U ≈α V
 _ = app (term α-renaming) (app (term α-renaming) (term α-refl))
@@ -293,32 +315,67 @@ _ = app (term α-renaming) (app (term α-renaming) (term α-refl))
 
 -- ¬ (W ≈α X) because free variables were renamed
 
-a-15 : (λ' "x" ⇒ var "y" [ λ' "y" ⇒ var "x" [ var "y" ] ] ) ⟨ "y" := λ' "z" ⇒ var "z" [ var "x" ] ⟩
-      ≡ λ' "z0" ⇒ (λ' "z" ⇒ var "z" [ var "x" ]) [ λ' "y" ⇒ var "z0" [ var "y" ] ]
+a-15 : (λ' "x" ⇒ "y" [ λ' "y" ⇒ "x" [ "y" ] ] ) ⟨ "y" := λ' "z" ⇒ "z" [ "x" ] ⟩
+      ≡ λ' "z₀" ⇒ (λ' "z" ⇒ "z" [ "x" ]) [ λ' "y" ⇒ "z₀" [ "y" ] ]
 a-15 = refl
 
-b-15 : ((var "x" [ var "y" ] [ var "z" ]) ⟨ "x" := var "y" ⟩) ⟨ "y" := var "z" ⟩ ≡ var "z" [ var "z" ] [ var "z" ]
+b-15 : (("x" [ "y" ] [ "z" ]) ⟨ "x" := "y" ⟩) ⟨ "y" := "z" ⟩ ≡ "z" [ "z" ] [ "z" ]
 b-15 = refl
 
-c-15 : ((λ' "x" ⇒ var "x" [ var "y" ] [ var "z" ]) ⟨ "x" := var "y" ⟩) ⟨ "y" := var "z" ⟩ ≡ λ' "x" ⇒ var "x" [ var "z" ] [ var "z" ]
+c-15 : ((λ' "x" ⇒ "x" [ "y" ] [ "z" ]) ⟨ "x" := "y" ⟩) ⟨ "y" := "z" ⟩ ≡ λ' "x" ⇒ "x" [ "z" ] [ "z" ]
 c-15 = refl
 
-d-15 : (λ' "y" ⇒ var "y" [ var "y" ] [ var "x" ]) ⟨ "x" := var "y" [ var "z" ] ⟩ ≡ λ' "z0" ⇒ var "z0" [ var "z0" ] [ var "y"  [ var "z" ] ]
+d-15 : (λ' "y" ⇒ "y" [ "y" ] [ "x" ]) ⟨ "x" := "y" [ "z" ] ⟩ ≡ λ' "z₀" ⇒ "z₀" [ "z₀" ] [ "y"  [ "z" ] ]
 d-15 = refl
 
-ex-16 : {x : Lambda} → ∃ (λ x → ¬ ((x ⟨ "y" := var "x"⟩) ⟨ "x" := var "y" ⟩ ≡ (x ⟨[ Map.fromList substs ]⟩)) )
+ex-16 : {x : Lambda} → ∃ (λ x → ¬ (x ⟨ "y" := "x"⟩) ⟨ "x" := "y" ⟩ ≡ (x ⟨[ substs ]⟩) )
 ex-16 = v , not-eq
   where
     v : Lambda
-    v = var "x" [ var "y" ]
-    not-eq : ¬ ((v ⟨ "y" := var "x"⟩) ⟨ "x" := var "y" ⟩ ≡ (v ⟨[ Map.fromList substs ]⟩))
-    not-eq with (((v ⟨ "y" := var "x"⟩) ⟨ "x" := var "y" ⟩) ≟λ (v ⟨[ Map.fromList substs ]⟩))
-    ... | no p = p
+    v = "x" [ "y" ]
+    not-eq : ¬ ((v ⟨ "y" := "x"⟩) ⟨ "x" := "y" ⟩ ≡ (v ⟨[ substs ]⟩))
+    not-eq with no p ← (v ⟨ "y" := "x"⟩) ⟨ "x" := "y" ⟩ ≟λ v ⟨[ substs ]⟩ = p
 
-infix 0 _→β_
+infixl 0 _→β_
 
 data _→β_ : Rel Lambda 0ℓ where
-  simple : ∀ {x M N} → (λ' x ⇒ M) [ N ] →β M ⟨ x := N ⟩
-  compat₁ : ∀ {M N L} → M →β N → M [ L ] →β N [ L ]
-  compat₂ : ∀ {M N L} → M →β N → L [ M ] →β L [ N ]
-  compat₃ : ∀ {M N z} → M →β N → (λ' z ⇒ M) →β (λ' z ⇒ N)
+  β-base : ∀ {x M N} → (λ' x ⇒ M) [ N ] →β M ⟨ x := N ⟩
+  β-compat₁ : ∀ {M N L} → M →β N → M [ L ] →β N [ L ]
+  β-compat₂ : ∀ {M N L} → M →β N → L [ M ] →β L [ N ]
+  β-compat₃ : ∀ {M N z} → M →β N → (λ' z ⇒ M) →β (λ' z ⇒ N)
+
+infix 0 _→β[_]_
+
+-- Multi-step β-reduction
+
+data _→β[_]_ : Lambda → ℕ → Lambda → Set where
+  β-refl : ∀ {x} → x →β[ 0 ] x
+  β-one-step : ∀ {M N} → M →β N → M →β[ 1 ] N
+  β-multi-step : ∀ {M N P m n} → M →β[ m ] N → N →β[ n ] P → M →β[ m + n ] P
+
+term₁ : Lambda
+term₁ = λ' "x" ⇒ "x"
+
+term₂ : Lambda
+term₂ = term₁ [ "y" ]
+
+term₃ : Lambda
+term₃ = term₂ [ "z" ]
+
+term₄ : Lambda
+term₄ = (λ' "x" ⇒ "x") [ (λ' "z" ⇒ "x") [ "y" ] ]
+
+_ : term₂ →β "y"
+_ = β-base
+
+_ : term₃ →β "y" [ "z" ]
+_ = β-compat₁ β-base
+
+_ : term₁ →β[ 0 ] λ' "x" ⇒ "x"
+_ = β-refl
+
+p₁ : (λ' "x" ⇒ "x") [ (λ' "z" ⇒ "x") [ "y" ] ] →β[ 1 ] (λ' "x" ⇒ "x") [ "x" ]
+p₁ = β-one-step (β-compat₂ β-base)
+
+_ : term₄ →β[ 2 ] "x"
+_ = β-multi-step p₁ (β-one-step β-base)
