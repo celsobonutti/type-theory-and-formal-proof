@@ -2,3 +2,4 @@ name: type-theory-and-formal-proof
 include: src
 depend:
   standard-library-2.0
+flags: --rewriting
