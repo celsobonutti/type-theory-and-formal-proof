@@ -5,8 +5,9 @@ open import Agda.Builtin.Reflection using (bindTC; TC; quoteTC; unify; Term)
 open import Data.Char using (Char)
 open import Data.List as List using (List; _∷_; [])
 open import Data.Maybe using (Maybe; just; nothing)
-open import Data.Nat using (ℕ; suc; _+_)
+open import Data.Nat as Nat using (ℕ; suc; _+_; _<_)
 open import Data.Nat.Show using (show)
+open import Data.Nat.Properties using (m+n≡0⇒m≡0; 1+n≢0; m+n≡0⇒n≡0; +-comm; n>0⇒n≢0)
 open import Data.Product using (_,_; ∃; _×_)
 open import Data.String as String using (String; _++_) renaming (_≈_ to _≈ₛ_; _≈?_ to _≈ₛ?_)
 open import Data.String.Properties renaming (≈-sym to ≈ₛ-sym; ≈-refl to ≈ₛ-refl; ≈-trans to ≈ₛ-trans)
@@ -15,7 +16,8 @@ open import Function.Base using (_∘_; id)
 open import Level using (Level; 0ℓ)
 open import Relation.Binary using (DecidableEquality) renaming (Decidable to Decidable₂)
 open import Relation.Binary.Core using (Rel; REL)
-open import Relation.Binary.PropositionalEquality using (_≡_; refl)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl; cong; trans; sym)
+open import Relation.Binary.PropositionalEquality.Properties
 open import Relation.Binary.Structures using (IsEquivalence)
 open import Relation.Nullary.Decidable using (True; False; _×-dec_; Dec; yes; no; toWitness; fromWitness; fromWitnessFalse; toWitnessFalse)
 open import Relation.Unary using (Pred)
@@ -351,10 +353,13 @@ infixl 0 _→ᵦ_
 
 data _→ᵦ_ : Rel Lambda 0ℓ where
   β-base : ∀ {x M N} → (λ' x ⇒ M) [ N ] →ᵦ M ⟨ x := N ⟩
-  β-alpha : ∀ {M N} → M =α N → M →ᵦ N
   β-compat₁ : ∀ {M N L} → M →ᵦ N → M [ L ] →ᵦ N [ L ]
   β-compat₂ : ∀ {M N L} → M →ᵦ N → L [ M ] →ᵦ L [ N ]
   β-compat₃ : ∀ {M N z} → M →ᵦ N → (λ' z ⇒ M) →ᵦ (λ' z ⇒ N)
+
+
+postulate
+  β-alpha : ∀ {M N} → M =α N → M →ᵦ N
 
 -- Multi-step β-reduction
 
@@ -364,16 +369,32 @@ data _↠ᵦ_ : {ℕ} → Lambda → Lambda → Set where
   β-refl : ∀ {x} → _↠ᵦ_ {0} x x
   β-one-step : ∀ {M N} → M →ᵦ N → _↠ᵦ_ {1} M N
   β-multi-step : ∀ {M N P m n} → _↠ᵦ_ {m} M N → _↠ᵦ_ {n} N P → _↠ᵦ_ {m + n} M P
-  β-multi-compat₁ : ∀ {m M N L} → _↠ᵦ_ {m} M N → _↠ᵦ_ {m} (M [ L ]) (N [ L ])
-  β-multi-compat₂ : ∀ {m M N L} → _↠ᵦ_ {m} M N → _↠ᵦ_ {m} (L [ M ]) (L [ N ])
-  β-multi-compat₃ : ∀ {m M N z} → _↠ᵦ_ {m} M N → _↠ᵦ_ {m} (λ' z ⇒ M) (λ' z ⇒ N)
+
+infix 0 _↠ᵦ[_]_
+
+_↠ᵦ[_]_ : Lambda → ℕ → Lambda → Set
+M ↠ᵦ[ m ] N = _↠ᵦ_ {m} M N
+
+β-multi-compat₁ : ∀ {m M N L} → _↠ᵦ_ {m} M N → _↠ᵦ_ {m} (M [ L ]) (N [ L ])
+β-multi-compat₁ β-refl = β-refl
+β-multi-compat₁ (β-one-step x) = β-one-step (β-compat₁ x)
+β-multi-compat₁ (β-multi-step x x₁) = β-multi-step (β-multi-compat₁ x) (β-multi-compat₁ x₁)
+β-multi-compat₂ : ∀ {m M N L} → _↠ᵦ_ {m} M N → _↠ᵦ_ {m} (L [ M ]) (L [ N ])
+
+β-multi-compat₂ β-refl = β-refl
+β-multi-compat₂ (β-one-step x) = β-one-step (β-compat₂ x)
+β-multi-compat₂ (β-multi-step x x₁) = β-multi-step (β-multi-compat₂ x) (β-multi-compat₂ x₁)
+
+β-multi-compat₃ : ∀ {m M N z} → _↠ᵦ_ {m} M N → _↠ᵦ_ {m} (λ' z ⇒ M) (λ' z ⇒ N)
+β-multi-compat₃ β-refl = β-refl
+β-multi-compat₃ (β-one-step x) = β-one-step (β-compat₃ x)
+β-multi-compat₃ (β-multi-step x x₁) = β-multi-step (β-multi-compat₃ x) (β-multi-compat₃ x₁)
 
 infix 0 _=ᵦ_
 
 data _=ᵦ_ : Lambda → Lambda → Set where
   β-right : ∀ {n M N} → _↠ᵦ_ {n} M N → M =ᵦ N
   β-left : ∀ {n M N} → _↠ᵦ_ {n} N M → M =ᵦ N
-  β-confluence : ∀ {M N P} →  M =ᵦ N → P =ᵦ N → M =ᵦ P
 
 β-reflexive : ∀ {M} → M =ᵦ M
 β-reflexive = β-right β-refl
@@ -381,10 +402,44 @@ data _=ᵦ_ : Lambda → Lambda → Set where
 β-symmetric : ∀ {M N} → M =ᵦ N → N =ᵦ M
 β-symmetric (β-right x) = β-left x
 β-symmetric (β-left x) = β-right x
-β-symmetric (β-confluence x y) = β-confluence y x
 
-β-transitive : ∀ {M N P} → M =ᵦ N → N =ᵦ P → M =ᵦ P
-β-transitive x y = β-confluence x (β-symmetric y)
+postulate
+  -- Try to prove again in the future
+  β-transitive : ∀ {M N P} → M =ᵦ N → N =ᵦ P → M =ᵦ P
+
+module =ᵦ-Reasoning where
+  begin_ : ∀ {M N} → M =ᵦ N → M =ᵦ N
+  begin_ x=y = x=y
+
+  _∎ : (M : Lambda) → M =ᵦ M
+  _∎ x = β-right β-refl
+
+  _↠ᵦ⟨_⟩_ : {n : ℕ} → (M : Lambda) → {N P : Lambda} → M ↠ᵦ[ n ] N → N =ᵦ P → M =ᵦ P
+  M ↠ᵦ⟨ MN ⟩ NP = β-transitive (β-right MN) NP
+
+  _↞ᵦ⟨_⟩_ : {n : ℕ} → (M : Lambda) → {N P : Lambda} → N ↠ᵦ[ n ] M → N =ᵦ P → M =ᵦ P
+  M ↞ᵦ⟨ MN ⟩ NP = β-transitive (β-left MN) NP
+
+  _=ᵦ⟨_⟩_ : (M : Lambda) → {N P : Lambda} → M =ᵦ N → N =ᵦ P → M =ᵦ P
+  M =ᵦ⟨ MN ⟩ NP = β-transitive MN NP
+
+  _≡⟨⟩_ : (x : Lambda) → ∀ {y} → x =ᵦ y → x =ᵦ y
+  x ≡⟨⟩ p = p
+
+  _≡⟨_⟩_ : (x : Lambda) → ∀ {y z} → x ≡ y → y =ᵦ z → x =ᵦ z
+  _ ≡⟨ refl ⟩ y~z = y~z
+
+  ⟦_⟧ : ∀ {M N} → M →ᵦ N → _↠ᵦ_ {1} M N
+  ⟦_⟧ = β-one-step
+
+  infix 1 begin_
+  infix 3 _∎
+  infixr 2 _↠ᵦ⟨_⟩_
+  infixr 2 _↞ᵦ⟨_⟩_
+  infixr 2 _=ᵦ⟨_⟩_
+  infixr 2 _≡⟨⟩_
+  infixr 2 _≡⟨_⟩_
+
 
 term₁ : Lambda
 term₁ = λ' "x" ⇒ "x"
@@ -440,6 +495,9 @@ module exercise-19 where
   _<$>_ : ∀ {M N P} → M →ᵦ N → N →ᵦ P → M ↠ᵦ P
   x <$> y = β-multi-step (β-one-step x) (β-one-step y)
 
+  pure : ∀ {M N} → M →ᵦ N → M ↠ᵦ N
+  pure = β-one-step
+
   infixl 2 _<*>_
   _<*>_ : ∀ {M N P m} → _↠ᵦ_ {m} M N → N →ᵦ P → _↠ᵦ_ {m + 1} M P
   x <*> y = β-multi-step x (β-one-step y)
@@ -468,7 +526,7 @@ module exercise-19 where
     step₃ = β-base
 
     _ : S [ P ] [ Q ] [ R ] ↠ᵦ P [ R ] [ Q [ R ] ]
-    _ = step₁ <$> step₂ <*> step₃
+    _ = ⦇ step₁ step₂ step₃ ⦈
 
   module a-3 where
     first-reduction : Lambda
@@ -548,9 +606,57 @@ module exercise-19 where
     _ = step₁ <*> step₂ <*> step₃ <*> step₄
 
   module a-5 where
+    p : (λ' "z" ⇒ S [ "z" ] [ S [ "z" ] ]) [ K ] [ K ] →ᵦ S [ K ] [ S [ K ] ] [ K ]
+    p = β-compat₁ β-base
+
+    p₂ : (λ' "z" ⇒ K [ "z" ] [ (S [ K ] [ "z" ]) ]) [ K ] →ᵦ K [ K ] [ S [ K ] [ K ] ]
+    p₂ = β-base
+
+
+    p₃ : S [ K ] [ K ] [ K ] →ᵦ (λ' "y" ⇒ λ' "z" ⇒ K [ "z" ] [ "y" [ "z" ] ]) [ K ] [ K ]
+    p₃ = β-compat₁ (β-compat₁ β-base)
+
+    p₄ : (λ' "y" ⇒ λ' "z" ⇒ K [ "z" ] [ "y" [ "z" ] ]) [ K ] [ K ] →ᵦ (λ' "z" ⇒ K [ "z" ] [ K [ "z" ] ]) [ K ]
+    p₄ = β-compat₁ β-base
+
+    p₅ : (λ' "z" ⇒ K [ "z" ] [ K [ "z" ] ]) [ K ] →ᵦ K [ K ] [ K [ K ] ]
+    p₅ = β-base
+
+    p₆ : K [ K ] [ K [ K ] ] →ᵦ (λ' "y" ⇒ K) [ K [ K ] ]
+    p₆ = β-compat₁ β-base
 
     _ : S [ S ] [ S ] [ K ] [ K ] =ᵦ S [ K ] [ K ] [ K ]
-    _ = {!!}
+    _ =
+      begin
+        S [ S ] [ S ] [ K ] [ K ]
+        ↠ᵦ⟨ ⟦ β-compat₁ (β-compat₁ (β-compat₁ β-base)) ⟧ ⟩
+        (λ' "y" ⇒ λ' "z" ⇒ S [ "z" ] [ "y" [ "z" ] ]) [ S ] [ K ] [ K ]
+        ↠ᵦ⟨ ⟦ β-compat₁ (β-compat₁ β-base) ⟧ ⟩
+        (λ' "z" ⇒ S [ "z" ] [ S [ "z" ] ]) [ K ] [ K ]
+        ↠ᵦ⟨ ⟦ p ⟧ ⟩
+        (λ' "x" ⇒ λ' "y" ⇒ λ' "z" ⇒ "x" [ "z" ] [ "y" [ "z" ] ]) [ K ] [ S [ K ] ] [ K ]
+        ↠ᵦ⟨ ⟦ β-compat₁ (β-compat₁ β-base) ⟧ ⟩
+        (λ' "y" ⇒ λ' "z" ⇒ K [ "z" ] [ "y" [ "z" ] ]) [ S [ K ] ] [ K ]
+        ↠ᵦ⟨ ⟦ β-compat₁ β-base ⟧ ⟩
+        (λ' "z" ⇒ K [ "z" ] [ (S [ K ] [ "z" ]) ]) [ K ]
+        ↠ᵦ⟨ ⟦ p₂ ⟧ ⟩
+        K [ K ] [ S [ K ] [ K ] ]
+        ↠ᵦ⟨ ⟦ β-compat₁ β-base ⟧ ⟩
+        (λ' "y" ⇒ K) [ S [ K ] [ K ] ]
+        ↠ᵦ⟨ ⟦ β-base ⟧ ⟩
+        K
+        ↞ᵦ⟨ ⟦ β-base ⟧ ⟩
+        (λ' "y" ⇒ K) [ K [ K ] ]
+        ↞ᵦ⟨ ⟦ p₆ ⟧ ⟩
+        K [ K ] [ K [ K ] ]
+        ↞ᵦ⟨ ⟦ p₅ ⟧ ⟩
+        (λ' "z" ⇒ K [ "z" ] [ K [ "z" ] ]) [ K ]
+        ↞ᵦ⟨ ⟦ p₄ ⟧ ⟩
+        (λ' "y" ⇒ λ' "z" ⇒ K [ "z" ] [ "y" [ "z" ] ]) [ K ] [ K ]
+        ↞ᵦ⟨ ⟦ p₃ ⟧ ⟩
+        S [ K ] [ K ] [ K ]
+      ∎
+      where open =ᵦ-Reasoning
 
 
 count-redexes : Lambda → ℕ
@@ -558,7 +664,10 @@ count-redexes (var x) = 0
 count-redexes (λ' x ⇒ x₁) = count-redexes x₁
 count-redexes (var x [ x₁ ]) = count-redexes x₁
 count-redexes ((λ' x ⇒ x₂) [ x₁ ]) = 1 + count-redexes x₁ + count-redexes x₂
-count-redexes (x [ x₂ ] [ x₁ ]) = count-redexes x + count-redexes x₁ + count-redexes x₂
+count-redexes (x [ x₂ ] [ x₁ ]) = count-redexes (x [ x₂ ]) + count-redexes x₁
+
+postulate
+  =α-redex : ∀ {M N} → M =α N → count-redexes M ≡ count-redexes N
 
 _ : count-redexes ((λ' "x" ⇒ ((λ' "y" ⇒ "y" [ "x" ]) [ "z" ])) [ "v" ]) ≡ 2
 _ = refl
@@ -568,6 +677,37 @@ data IsNormalForm : Pred Lambda 0ℓ where
 
 data HasNormalForm : Pred Lambda 0ℓ where
   has-normal-form : ∀ {M N} → M =ᵦ N → IsNormalForm N → HasNormalForm M
+
+0<n→0<n+m : ∀ {x y} → 0 < x → 0 < x + y
+0<n→0<n+m {.(suc _)} {y} (Nat.s≤s x₁) = Nat.z<s
+
+0<n→0<m+n : ∀ {x y} → 0 < x → 0 < y + x
+0<n→0<m+n {suc n} {y} (Nat.s≤s Nat.z≤n) rewrite +-comm y (suc n) = Nat.z<s
+
+compat₁-redex : ∀ M L → 0 < count-redexes M → 0 < count-redexes (M [ L ])
+compat₁-redex (λ' x₁ ⇒ M) L x = Nat.z<s
+compat₁-redex (M [ M₁ ]) L x = 0<n→0<n+m x
+
+compat₂-redex : ∀ M L → 0 < count-redexes M → 0 < count-redexes (L [ M ])
+compat₂-redex M (var x₁) x = x
+compat₂-redex M (λ' x₁ ⇒ L) x = Nat.z<s
+compat₂-redex M (L [ L₁ ]) x = 0<n→0<m+n x
+
+compat₁-refl : ∀ {M N L} → M ≡ N → M [ L ] ≡ N [ L ]
+compat₁-refl refl = refl
+
+redex-reduction : ∀ {M N} → M →ᵦ N → 0 < count-redexes M
+redex-reduction β-base = Nat.z<s
+redex-reduction {M} {N} (β-compat₁ {M₁} {N₁} {L} x) = compat₁-redex M₁ L (redex-reduction x)
+redex-reduction {M} {N} (β-compat₂ {M₁} {N₁} {L} x) = compat₂-redex M₁ L (redex-reduction x)
+redex-reduction {M} {N} (β-compat₃ {M₁} {N₁} {z} x) = redex-reduction x
+
+is-nf-M : ∀ {M N n} → IsNormalForm M → M ↠ᵦ[ n ] N → M ≡ N
+is-nf-M (is-normal-form x) β-refl = refl
+is-nf-M (is-normal-form x) (β-one-step y) with explode ← redex-reduction y = contradiction x (n>0⇒n≢0 explode)
+is-nf-M (is-normal-form x) (β-multi-step {M} {N} {L} x₁ x₂) with is-nf-M (is-normal-form x) x₁
+... | refl with is-nf-M (is-normal-form x) x₂
+... | refl = refl
 
 module ChurchNumerals where
   zero : Lambda
@@ -585,8 +725,32 @@ module ChurchNumerals where
   mult : Lambda
   mult = λ' "m" ⇒ λ' "n" ⇒ λ' "f" ⇒ λ' "x" ⇒ "m" [ "n" [ "f" ] ] [ "x" ]
 
-  -- step₁ : add [ one ] [ one ] ↠ᵦ λ' "n" ⇒ λ' "f" ⇒ λ' "x" ⇒ (λ' "f" ⇒ λ' "x" ⇒ "f" [ "x" ]) [ "f" ] [ "n" [ "f" ] [ "x" ] ]
-  -- step₁ = β-one-step {!!}
+  p : (λ' "x" ⇒ "f" [ "x" ]) [ one [ "f" ] [ "x" ] ] →ᵦ "f" [ one [ "f" ] [ "x" ] ]
+  p = β-base
 
-  -- add-one↠two : add [ one ] [ one ] ↠ᵦ two
-  -- add-one↠two = {!!}
+  add-one↠two : add [ one ] [ one ] =ᵦ two
+  add-one↠two =
+    begin
+      add [ one ] [ one ]
+      ≡⟨⟩
+      (λ' "m" ⇒ λ' "n" ⇒ λ' "f" ⇒ λ' "x" ⇒ "m" [ "f" ] [ "n" [ "f" ] [ "x" ] ]) [ one ] [ one ]
+      ↠ᵦ⟨ ⟦ β-compat₁ β-base ⟧ ⟩
+      (λ' "n" ⇒ λ' "f" ⇒ λ' "x" ⇒ one [ "f" ] [ "n" [ "f" ] [ "x" ] ]) [ one ]
+      ↠ᵦ⟨ ⟦ β-base ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ one [ "f" ] [ one [ "f" ] [ "x" ] ]
+      ≡⟨⟩
+      λ' "f" ⇒ λ' "x" ⇒ (λ' "f" ⇒ λ' "x" ⇒ "f" [ "x" ]) [ "f" ] [ one [ "f" ] [ "x" ] ]
+      ↠ᵦ⟨ ⟦ β-compat₃ (β-compat₃ (β-compat₁ β-base)) ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ (λ' "x" ⇒ "f" [ "x" ]) [ one [ "f" ] [ "x" ] ]
+      ↠ᵦ⟨ ⟦ β-compat₃ (β-compat₃ p) ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ "f" [ one [ "f" ] [ "x" ] ]
+      ≡⟨⟩
+      λ' "f" ⇒ λ' "x" ⇒ "f" [ (λ' "f" ⇒ λ' "x" ⇒ "f" [ "x" ]) [ "f" ] [ "x" ] ]
+      ↠ᵦ⟨ ⟦ β-compat₃ (β-compat₃ (β-compat₂ (β-compat₁ β-base))) ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ "f" [ (λ' "x" ⇒ "f" [ "x" ]) [ "x" ] ]
+      ↠ᵦ⟨ ⟦ β-compat₃ (β-compat₃ (β-compat₂ β-base)) ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ "f" [ "f" [ "x" ] ]
+      ≡⟨⟩
+      two
+    ∎
+    where open =ᵦ-Reasoning
