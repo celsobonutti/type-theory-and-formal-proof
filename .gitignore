@@ -1,1 +1,2 @@
-_build/
+agda/_build/
+lean/.lake/

@@ -12,6 +12,7 @@ open import Data.Product using (_,_; ∃; _×_)
 open import Data.String as String using (String; _++_) renaming (_≈_ to _≈ₛ_; _≈?_ to _≈ₛ?_)
 open import Data.String.Properties renaming (≈-sym to ≈ₛ-sym; ≈-refl to ≈ₛ-refl; ≈-trans to ≈ₛ-trans)
 open import Data.Unit using (⊤; tt)
+open import FromString
 open import Function.Base using (_∘_; id)
 open import Level using (Level; 0ℓ)
 open import Relation.Binary using (DecidableEquality) renaming (Decidable to Decidable₂)
@@ -33,25 +34,14 @@ data Lambda : Set where
   λ'_⇒_ : String → Lambda → Lambda
   _[_] : Lambda → Lambda → Lambda
 
-record IsString (A : Set) : Set where
-  field
-    from-string : String → A
-
 instance
-  stringIsString : IsString String
-  IsString.from-string stringIsString = id
-
   lambdaIsString : IsString Lambda
   IsString.from-string lambdaIsString = var
-
-open IsString ⦃...⦄ public using (from-string)
-
-{-# BUILTIN FROMSTRING from-string #-}
 
 Map : Set
 Map = StrMap Lambda
 
-_ : "x" [ "y" ] [ "z"  ] ≡ ("x" [ "y" ]) [ "z" ]
+_ : "x" [ "y" ] [ "z" ] ≡ ("x" [ "y" ]) [ "z" ]
 _ = refl
 
 _ : λ' "x" ⇒ "x" [ "y" ] ≡ λ' "x" ⇒ ("x" [ "y" ])
@@ -396,12 +386,21 @@ data _=ᵦ_ : Lambda → Lambda → Set where
   β-right : ∀ {n M N} → _↠ᵦ_ {n} M N → M =ᵦ N
   β-left : ∀ {n M N} → _↠ᵦ_ {n} N M → M =ᵦ N
 
+
+
 β-reflexive : ∀ {M} → M =ᵦ M
 β-reflexive = β-right β-refl
 
 β-symmetric : ∀ {M N} → M =ᵦ N → N =ᵦ M
 β-symmetric (β-right x) = β-left x
 β-symmetric (β-left x) = β-right x
+
+β-euclidean : ∀ {M N P} → M =ᵦ N → N =ᵦ P → M =ᵦ P
+β-euclidean (β-right x) (β-right y) = β-right (β-multi-step x y)
+β-euclidean (β-left x) (β-left y) = β-left (β-multi-step y x)
+β-euclidean (β-right x) n→p = {!!}
+β-euclidean (β-left x) (β-right y) = {!!}
+
 
 postulate
   -- Try to prove again in the future
@@ -484,10 +483,6 @@ module exercise-19 where
   postulate
     FV-P : FV P ≡ empty
     P-replace : ∀ {x M} → P ⟨ x := M ⟩ ≡ P
-    FV-Q : FV Q ≡ empty
-    Q-replace : ∀ {x M} → Q ⟨ x := M ⟩ ≡ Q
-    FV-R : FV R ≡ empty
-    R-replace : ∀ {x M} → Q ⟨ x := M ⟩ ≡ R
 
   {-# REWRITE FV-P P-replace #-}
 
@@ -696,17 +691,17 @@ compat₂-redex M (L [ L₁ ]) x = 0<n→0<m+n x
 compat₁-refl : ∀ {M N L} → M ≡ N → M [ L ] ≡ N [ L ]
 compat₁-refl refl = refl
 
-redex-reduction : ∀ {M N} → M →ᵦ N → 0 < count-redexes M
-redex-reduction β-base = Nat.z<s
-redex-reduction {M} {N} (β-compat₁ {M₁} {N₁} {L} x) = compat₁-redex M₁ L (redex-reduction x)
-redex-reduction {M} {N} (β-compat₂ {M₁} {N₁} {L} x) = compat₂-redex M₁ L (redex-reduction x)
-redex-reduction {M} {N} (β-compat₃ {M₁} {N₁} {z} x) = redex-reduction x
+needs-redex-to-reduce : ∀ {M N} → M →ᵦ N → 0 < count-redexes M
+needs-redex-to-reduce β-base = Nat.z<s
+needs-redex-to-reduce (β-compat₁ {M₁} {_} {L} x) = compat₁-redex M₁ L (needs-redex-to-reduce x)
+needs-redex-to-reduce (β-compat₂ {M₁} {_} {L} x) = compat₂-redex M₁ L (needs-redex-to-reduce x)
+needs-redex-to-reduce (β-compat₃ x) = needs-redex-to-reduce x
 
-is-nf-M : ∀ {M N n} → IsNormalForm M → M ↠ᵦ[ n ] N → M ≡ N
-is-nf-M (is-normal-form x) β-refl = refl
-is-nf-M (is-normal-form x) (β-one-step y) with explode ← redex-reduction y = contradiction x (n>0⇒n≢0 explode)
-is-nf-M (is-normal-form x) (β-multi-step {M} {N} {L} x₁ x₂) with is-nf-M (is-normal-form x) x₁
-... | refl with is-nf-M (is-normal-form x) x₂
+nf-only-reduces-to-itself : ∀ {M N n} → IsNormalForm M → M ↠ᵦ[ n ] N → M ≡ N
+nf-only-reduces-to-itself (is-normal-form x) β-refl = refl
+nf-only-reduces-to-itself (is-normal-form x) (β-one-step y) with explode ← needs-redex-to-reduce y = contradiction x (n>0⇒n≢0 explode)
+nf-only-reduces-to-itself (is-normal-form x) (β-multi-step {M} {N} {L} x₁ x₂) with nf-only-reduces-to-itself (is-normal-form x) x₁
+... | refl with nf-only-reduces-to-itself (is-normal-form x) x₂
 ... | refl = refl
 
 module ChurchNumerals where
@@ -754,3 +749,46 @@ module ChurchNumerals where
       two
     ∎
     where open =ᵦ-Reasoning
+
+  mult-one-zero↠zero : mult [ one ] [ zero ] =ᵦ zero
+  mult-one-zero↠zero =
+    begin
+      mult [ one ] [ zero ]
+      ≡⟨⟩
+      (λ' "m" ⇒ λ' "n" ⇒ λ' "f" ⇒ λ' "x" ⇒ "m" [ "n" [ "f" ] ] [ "x" ]) [ one ] [ zero ]
+      ↠ᵦ⟨ ⟦ β-compat₁ β-base ⟧ ⟩
+      (λ' "n" ⇒ λ' "f" ⇒ λ' "x" ⇒ one [ "n" [ "f" ] ] [ "x" ]) [ zero ]
+      ↠ᵦ⟨ ⟦ β-base ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ one [ zero [ "f" ] ] [ "x" ]
+      ≡⟨⟩
+      λ' "f" ⇒ λ' "x" ⇒ one [ (λ' "f" ⇒ λ' "x" ⇒ "x") [ "f" ] ] [ "x" ]
+      ↠ᵦ⟨ ⟦ β-compat₃ (β-compat₃ (β-compat₁ (β-compat₂ β-base))) ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ one [ λ' "x" ⇒ "x" ] [ "x" ]
+      ≡⟨⟩
+      λ' "f" ⇒ λ' "x" ⇒ (λ' "f" ⇒ λ' "x" ⇒ "f" [ "x" ]) [ λ' "x" ⇒ "x" ] [ "x" ]
+      ↠ᵦ⟨ ⟦ β-compat₃ (β-compat₃ (β-compat₁ β-base)) ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ (λ' "x" ⇒ (λ' "x" ⇒ "x") [ "x" ]) [ "x" ]
+      ↠ᵦ⟨ ⟦ β-compat₃ (β-compat₃ β-base) ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ ((λ' "x" ⇒ "x") [ "x" ])
+      ↠ᵦ⟨ ⟦ β-compat₃ (β-compat₃ β-base) ⟧ ⟩
+      λ' "f" ⇒ λ' "x" ⇒ "x"
+      ≡⟨⟩
+      zero
+    ∎
+    where open =ᵦ-Reasoning
+
+  two-is-nf : IsNormalForm two
+  two-is-nf = is-normal-form refl
+
+  zero-is-nf : IsNormalForm zero
+  zero-is-nf = is-normal-form refl
+
+  ¬-two↠zero : ¬ (two =ᵦ zero)
+  ¬-two↠zero (β-right x) with no ¬eq ← two ≟λ zero = contradiction (nf-only-reduces-to-itself two-is-nf x) ¬eq
+  ¬-two↠zero (β-left x)  with no ¬eq ← zero ≟λ two = contradiction (nf-only-reduces-to-itself zero-is-nf x) ¬eq
+
+  add↠mul : add [ one ] [ one ] =ᵦ mult [ one ] [ zero ] → two =ᵦ zero
+  add↠mul x = β-transitive (β-transitive (β-symmetric add-one↠two) x) mult-one-zero↠zero
+
+  ¬-add-one-one↠mult-one-zero : ¬ (add [ one ] [ one ] =ᵦ mult [ one ] [ zero ])
+  ¬-add-one-one↠mult-one-zero = contraposition add↠mul ¬-two↠zero
